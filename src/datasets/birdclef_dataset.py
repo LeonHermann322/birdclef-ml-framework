@@ -33,9 +33,8 @@ class BirdClefSoundScapeSample(Sample):
 
         plt.figure(figsize=(10, 4))
         librosa.display.specshow(
-            self.input.numpy(), sr=32000, hop_length=128, x_axis="time", y_axis="mel"
+            self.input.numpy(), sr=32000, x_axis="time", y_axis="mel"
         )
-        plt.colorbar(format="%+2.0f dB")
         plt.title(f"Mel spectrogram - Label count: {self.target.sum().item()}")
         plt.tight_layout()
         plt.show()
@@ -54,9 +53,8 @@ class BirdClefSoundScapeSample(Sample):
 
         # Load audio and compute spectrogram
         audio, sr = librosa.load(filename, sr=32000, offset=start, duration=end - start)
-        # TODO: mel spectrogram parameters
-        spectrogram = librosa.feature.melspectrogram(
-            y=audio, sr=sr, win_length=1024, hop_length=128, n_mels=128, fmax=8000
-        )
+        spectrogram = librosa.feature.melspectrogram(y=audio, sr=sr)
+        # Convert to log scale (dB)
+        spectrogram = librosa.power_to_db(spectrogram, ref=np.max)
         label_tensor = label_encoder.transform_to_label_tensor(labels.split(";"))
         return BirdClefSoundScapeSample(torch.tensor(spectrogram), label_tensor)
