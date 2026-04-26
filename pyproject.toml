@@ -166,6 +166,8 @@ dependencies = [
     "wavio",
     "xvfbwrapper",
     "ydata-profiling",
+    "librosa",
+    "pandas",
 ]
 
 [tool.uv]
