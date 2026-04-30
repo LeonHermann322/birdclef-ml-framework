@@ -168,6 +168,7 @@ dependencies = [
     "ydata-profiling",
     "librosa",
     "pandas",
+    "iterative-stratification",
 ]
 
 [tool.uv]

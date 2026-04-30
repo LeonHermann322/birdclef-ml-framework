@@ -4,3 +4,4 @@ results/**
 config.yaml
 *.solv
 **/y/**
+*.csv
