@@ -61,6 +61,8 @@ class BaseExperimentArgs(PDBaseModel):
     )
     results_subdir_name: Optional[str] = None
     use_cuda: bool = True
+    # TODO: num workers does not work for BirdClefDataset, need to figure out why
+    num_workers: int = 0
 
 
 class BaseExperiment(metaclass=ABCMeta):
@@ -190,6 +192,7 @@ class BaseExperiment(metaclass=ABCMeta):
             batch_size=self.base_config.batch_size,
             shuffle=True,
             collate_fn=ds.get_collate_fn(),
+            num_workers=self.base_config.num_workers,
         )
 
     @abstractmethod

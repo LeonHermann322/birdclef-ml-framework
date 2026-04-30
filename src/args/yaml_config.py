@@ -20,6 +20,13 @@ class YamlConfigModel(BaseModel):
     results_dir: str = Field(
         default="results", description="Output directory for experiment results"
     )
+    base_data_dir: str = Field(
+        default="data",
+        description="Base directory for all datasets. Each dataset should be in a subdirectory here.",
+    )
+    project_root_dir: str = Field(
+        description="Root directory of the project. Used for resolving relative paths in the config.",
+    )
 
 
 class YamlConfig:

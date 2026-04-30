@@ -1,11 +1,22 @@
-from typing import Optional
+from typing import Callable, Literal, Optional
+from typing_extensions import Self
+from pydantic import BaseModel
 
 import torch
+import torch.nn.functional as F
 
-from src.datasets.base_dataset import Sample
+from src.datasets.base_dataset import Batch
+from src.args.yaml_config import YamlConfigModel
+from src.datasets.base_dataset import BaseDataset, Sample
 import librosa
 import numpy as np
 import pandas as pd
+import ast
+
+
+class BirdClefDatasetArgs(BaseModel):
+    # TODO: this is only for debug experiment. However, need to find a good approach to handling long audio inputs
+    max_audio_length: int = 4096
 
 
 class LabelEncoder:
@@ -29,7 +40,10 @@ class LabelEncoder:
 
 
 def load_audio_and_compute_spectrogram(
-    file_path: str, start: Optional[float] = None, end: Optional[float] = None
+    file_path: str,
+    start: Optional[float] = None,
+    end: Optional[float] = None,
+    max_length: Optional[int] = None,
 ):
     # Load audio and compute spectrogram
     if start is None or end is None:
@@ -38,9 +52,14 @@ def load_audio_and_compute_spectrogram(
         audio, sr = librosa.load(
             file_path, sr=32000, offset=start, duration=end - start
         )
+    # TODO: mel spectrogram parameter finetuning
     spectrogram = librosa.feature.melspectrogram(y=audio, sr=sr)
     # Convert to log scale (dB)
     spectrogram = librosa.power_to_db(spectrogram, ref=np.max)
+
+    if max_length is not None and spectrogram.shape[1] > max_length:
+        spectrogram = spectrogram[:, :max_length]
+
     return spectrogram
 
 
@@ -120,3 +139,69 @@ class BirdClefSample(Sample):
 
         label_tensor = label_encoder.transform_to_label_tensor(total_labels)
         return BirdClefSample(torch.tensor(spectrogram), label_tensor)
+
+    @staticmethod
+    def from_split_label(
+        row: pd.Series, label_encoder: LabelEncoder, max_length: Optional[int] = None
+    ):
+        spectrogram = load_audio_and_compute_spectrogram(
+            row.filename, max_length=max_length
+        )
+        label_tensor = label_encoder.transform_to_label_tensor(
+            ast.literal_eval(row.labels)
+        )
+        return BirdClefSample(torch.tensor(spectrogram), label_tensor)
+
+
+class BirdClefDataset(BaseDataset):
+    def __init__(self, config: BirdClefDatasetArgs, yaml_config: YamlConfigModel):
+        self.yaml_config = yaml_config
+        self.config = config
+        self.label_encoder = LabelEncoder(
+            taxonomy_file=yaml_config.base_data_dir + "/taxonomy.csv"
+        )
+
+    def get_split(
+        self, split: Literal["train"] | Literal["val"] | Literal["test"]
+    ) -> Self:
+        if split == "train":
+            self.items = pd.read_csv(
+                self.yaml_config.project_root_dir + "/train_split.csv"
+            )
+        elif split == "val":
+            self.items = pd.read_csv(
+                self.yaml_config.project_root_dir + "/val_split.csv"
+            )
+        elif split == "test":
+            self.items = pd.read_csv(
+                self.yaml_config.project_root_dir + "/test_split.csv"
+            )
+        else:
+            raise ValueError(f"Invalid split: {split}")
+        return self
+
+    def __getitem__(self, index: int) -> BirdClefSample:
+        row = self.items.iloc[index]
+        return BirdClefSample.from_split_label(
+            row, self.label_encoder, max_length=self.config.max_audio_length
+        )
+
+    def __len__(self):
+        return len(self.items)
+
+    def get_collate_fn(self) -> Callable[[list[Sample]], Batch]:
+        def collate_fn(samples: list[Sample]) -> Batch:
+            # Input sizes: [128, x] - variable time dimension
+            inputs = [sample.input for sample in samples]
+            targets = torch.stack([sample.target for sample in samples])
+
+            # Pad all inputs to max length in batch
+            max_length = max(inp.shape[1] for inp in inputs)
+            padded_inputs = [
+                F.pad(inp, (0, max_length - inp.shape[1])) for inp in inputs
+            ]
+            inputs = torch.stack(padded_inputs)
+
+            return Batch(input=inputs, target=targets)
+
+        return collate_fn
