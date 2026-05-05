@@ -14,7 +14,7 @@ import pandas as pd
 import ast
 
 
-class BirdClefDatasetArgs(BaseModel):
+class BirdClefSpectrogramDatasetArgs(BaseModel):
     # TODO: this is only for debug experiment. However, need to find a good approach to handling long audio inputs
     max_audio_length: int = 4096
 
@@ -63,7 +63,7 @@ def load_audio_and_compute_spectrogram(
     return spectrogram
 
 
-class BirdClefSample(Sample):
+class BirdClefSpectrogramSample(Sample):
     def __init__(self, spectrogram, label):
         super().__init__(input=spectrogram, target=label)
 
@@ -99,7 +99,7 @@ class BirdClefSample(Sample):
         spectrogram = load_audio_and_compute_spectrogram(filename, start, end)
 
         label_tensor = label_encoder.transform_to_label_tensor(labels.split(";"))
-        return BirdClefSample(torch.tensor(spectrogram), label_tensor)
+        return BirdClefSpectrogramSample(torch.tensor(spectrogram), label_tensor)
 
     @staticmethod
     def from_audio_label(row: pd.Series, label_encoder: LabelEncoder, ds_path: str):
@@ -138,7 +138,7 @@ class BirdClefSample(Sample):
         spectrogram = load_audio_and_compute_spectrogram(filename)
 
         label_tensor = label_encoder.transform_to_label_tensor(total_labels)
-        return BirdClefSample(torch.tensor(spectrogram), label_tensor)
+        return BirdClefSpectrogramSample(torch.tensor(spectrogram), label_tensor)
 
     @staticmethod
     def from_split_label(
@@ -150,11 +150,13 @@ class BirdClefSample(Sample):
         label_tensor = label_encoder.transform_to_label_tensor(
             ast.literal_eval(row.labels)
         )
-        return BirdClefSample(torch.tensor(spectrogram), label_tensor)
+        return BirdClefSpectrogramSample(torch.tensor(spectrogram), label_tensor)
 
 
-class BirdClefDataset(BaseDataset):
-    def __init__(self, config: BirdClefDatasetArgs, yaml_config: YamlConfigModel):
+class BirdClefSpectrogramDataset(BaseDataset):
+    def __init__(
+        self, config: BirdClefSpectrogramDatasetArgs, yaml_config: YamlConfigModel
+    ):
         self.yaml_config = yaml_config
         self.config = config
         self.label_encoder = LabelEncoder(
@@ -180,9 +182,9 @@ class BirdClefDataset(BaseDataset):
             raise ValueError(f"Invalid split: {split}")
         return self
 
-    def __getitem__(self, index: int) -> BirdClefSample:
+    def __getitem__(self, index: int) -> BirdClefSpectrogramSample:
         row = self.items.iloc[index]
-        return BirdClefSample.from_split_label(
+        return BirdClefSpectrogramSample.from_split_label(
             row, self.label_encoder, max_length=self.config.max_audio_length
         )
 

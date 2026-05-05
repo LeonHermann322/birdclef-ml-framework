@@ -5,7 +5,10 @@ from src.models.basic_spectrogram_model import (
     BasicSpectrogramModelArgs,
 )
 from src.datasets.base_dataset import BaseDataset
-from src.datasets.birdclef_dataset import BirdClefDataset, BirdClefDatasetArgs
+from src.datasets.birdclef_spectrogram_dataset import (
+    BirdClefSpectrogramDataset,
+    BirdClefSpectrogramDatasetArgs,
+)
 from src.args.yaml_config import YamlConfigModel
 from src.optimizers.adam import AdamArgs, create_adam_optimizer
 from src.schedulers.step_lr import StepLRArgs, create_steplr_scheduler
@@ -13,7 +16,11 @@ from src.experiments.base_experiment import BaseExperiment, BaseExperimentArgs
 
 
 class BirdClefExperimentArgs(
-    BaseExperimentArgs, AdamArgs, StepLRArgs, BasicSpectrogramModelArgs, BirdClefDatasetArgs
+    BaseExperimentArgs,
+    AdamArgs,
+    StepLRArgs,
+    BasicSpectrogramModelArgs,
+    BirdClefSpectrogramDatasetArgs,
 ):
     pass
 
@@ -21,7 +28,7 @@ class BirdClefExperimentArgs(
 class BirdClefExperiment(BaseExperiment):
     def __init__(self, config: dict[str, Any], yaml_config: YamlConfigModel):
         self.config = BirdClefExperimentArgs(**config)
-        self.birdclef_data = BirdClefDataset(self.config, yaml_config)
+        self.birdclef_data = BirdClefSpectrogramDataset(self.config, yaml_config)
         super().__init__(config, yaml_config)
 
     def get_name(self) -> str:
