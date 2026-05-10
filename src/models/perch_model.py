@@ -1,3 +1,5 @@
+from typing import Any
+
 import torch
 
 from src.datasets.base_dataset import Batch
@@ -7,6 +9,8 @@ from perch_hoplite.zoo import model_configs
 import os
 from torch.nn import BCEWithLogitsLoss
 import pandas as pd
+
+NUM_CLASSES_PERCH = 14795
 
 
 class LabelMapping:
@@ -63,6 +67,14 @@ class LabelMapping:
         return mapped_logits
 
 
+class PerchModelOutput(ModelOutput):
+    embedding: torch.Tensor
+
+    def __init__(self, logits, embedding):
+        super().__init__(logits)
+        self.embedding = embedding
+
+
 class PerchModel(BaseModel):
     def __init__(self, yaml_config: YamlConfigModel):
         super().__init__()
@@ -70,14 +82,15 @@ class PerchModel(BaseModel):
         self.model = model_configs.load_model_by_name("perch_v2")
         self.loss_fn = BCEWithLogitsLoss()
 
-    def forward(self, batch: Batch) -> ModelOutput:
+    def forward(self, batch: Batch) -> PerchModelOutput:
         embed_output = self.model.embed(batch.input.numpy())
         assert embed_output.logits is not None
 
-        return ModelOutput(
+        return PerchModelOutput(
             logits=self.label_mapping.map_perch_to_birdclef(
                 torch.from_numpy(embed_output.logits["label"].copy())
-            )
+            ),
+            embedding=embed_output.embeddings,
         )
 
     def compute_loss(self, outputs: ModelOutput, batch: Batch) -> Loss:
@@ -92,14 +105,8 @@ class PerchModel(BaseModel):
         mapped_logits = outputs.logits.index_select(1, mapped_birdclef_indices)
         mapped_targets = batch.target.float().index_select(1, mapped_birdclef_indices)
         loss_value = self.loss_fn(mapped_logits, mapped_targets)
-        # TODO: remove sanity check...
-        # Multi-label accuracy over mapped BirdCLEF classes only.
-        # decision_threshold = 1.0 / mapped_targets.sum()
-        # predictions = (torch.softmax(mapped_logits, dim=1) > decision_threshold).float()
-
-        k = int(mapped_targets.sum().item())
-        topk_indices = torch.topk(mapped_logits, k=max(k, 1), dim=1).indices
-        predictions = torch.zeros_like(mapped_logits).scatter_(1, topk_indices, 1.0)
+        decision_threshold = 1.0 / NUM_CLASSES_PERCH
+        predictions = (torch.softmax(mapped_logits, dim=1) > decision_threshold).float()
 
         accuracy = (predictions == mapped_targets).float().mean()
 
