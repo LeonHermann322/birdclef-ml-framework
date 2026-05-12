@@ -10,6 +10,7 @@ from src.datasets.base_dataset import Batch
 from src.args.yaml_config import YamlConfigModel
 from src.datasets.base_dataset import BaseDataset, Sample
 from src.datasets.birdclef_spectrogram_dataset import LabelEncoder
+from src.datasets.birdclef_utils import load_splits
 import librosa
 import numpy as np
 import pandas as pd
@@ -162,6 +163,7 @@ class BirdClefWaveformDataset(BaseDataset):
     ):
         self.yaml_config = yaml_config
         self.config = config
+        self.train_split, self.val_split, self.test_split = load_splits(yaml_config)
         self.items = pd.DataFrame()
         self.label_encoder = LabelEncoder(
             taxonomy_file=yaml_config.base_data_dir + "/taxonomy.csv"
@@ -171,17 +173,11 @@ class BirdClefWaveformDataset(BaseDataset):
         self, split: Literal["train"] | Literal["val"] | Literal["test"]
     ) -> Self:
         if split == "train":
-            self.items = pd.read_csv(
-                self.yaml_config.project_root_dir + "/train_split.csv"
-            )
+            self.items = self.train_split
         elif split == "val":
-            self.items = pd.read_csv(
-                self.yaml_config.project_root_dir + "/val_split.csv"
-            )
+            self.items = self.val_split
         elif split == "test":
-            self.items = pd.read_csv(
-                self.yaml_config.project_root_dir + "/test_split.csv"
-            )
+            self.items = self.test_split
         else:
             raise ValueError(f"Invalid split: {split}")
 

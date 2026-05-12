@@ -27781,3 +27781,8 @@ filename,primary_label,below_lower_quantile
 ./data/birdclef_dataset/train_soundscapes/BC2026_Train_0004_S08_20250607_070007_split_train_start_00_end_25.ogg,"['47158son03', '47158son17', '47158son18']",
 ./data/birdclef_dataset/train_soundscapes/BC2026_Train_0065_S23_20241124_040002_split_train_start_00_end_20.ogg,"['47158son25', '47158son14', '47158son06', '47158son02']",
 ./data/birdclef_dataset/train_soundscapes/BC2026_Train_0005_S08_20250607_070007_split_train_start_00_end_25.ogg,"['47158son25', '47158son17', '47158son15', '47158son16']",
+./data/augment_data/black-tailed-marmoset-0-n-0-c-05.ogg,"['74580']",
+./data/augment_data/ranita-boyadora-enana-lysapsus-limellum-2-yilkul.ogg,"['1595929']",
+./data/augment_data/ranita-nadadora-chica-lisapsus-limellum-z-00-ffe.ogg,"['1595929']",
+./data/augment_data/the-clicking-sounds-of-uruguay-harlequin-frogs-2-bxxbt.ogg,"['1595929']",
+./data/augment_data/XC1091672 - Black-tailed Marmoset - Mico melanurus.wav,"['74580']",

@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from src.datasets.base_dataset import Batch
 from src.args.yaml_config import YamlConfigModel
 from src.datasets.base_dataset import BaseDataset, Sample
+from src.datasets.birdclef_utils import load_splits
 import librosa
 import numpy as np
 import pandas as pd
@@ -159,6 +160,7 @@ class BirdClefSpectrogramDataset(BaseDataset):
     ):
         self.yaml_config = yaml_config
         self.config = config
+        self.train, self.val, self.test = load_splits(yaml_config)
         self.label_encoder = LabelEncoder(
             taxonomy_file=yaml_config.base_data_dir + "/taxonomy.csv"
         )
@@ -167,17 +169,11 @@ class BirdClefSpectrogramDataset(BaseDataset):
         self, split: Literal["train"] | Literal["val"] | Literal["test"]
     ) -> Self:
         if split == "train":
-            self.items = pd.read_csv(
-                self.yaml_config.project_root_dir + "/train_split.csv"
-            )
+            self.items = self.train
         elif split == "val":
-            self.items = pd.read_csv(
-                self.yaml_config.project_root_dir + "/val_split.csv"
-            )
+            self.items = self.val
         elif split == "test":
-            self.items = pd.read_csv(
-                self.yaml_config.project_root_dir + "/test_split.csv"
-            )
+            self.items = self.test
         else:
             raise ValueError(f"Invalid split: {split}")
         return self
