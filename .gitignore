@@ -4,4 +4,7 @@ results/**
 config.yaml
 *.solv
 **/y/**
-data/*
+*.csv
+**/.venv/**
+
+data/**

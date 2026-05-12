@@ -88,18 +88,15 @@ dependencies = [
     "ipywidgets==8.1.5",
     "isoweek",
     "jedi",
-    # Pinned: 0.11.1 breaks simulation image
-    "jiter==0.10.0",
-    # Pinned: later versions break Jupyter LSP (b/276358430)
-    "jupyter-lsp==1.5.1",
-    # Pinned: later versions break LSP (b/333854354)
-    "jupyter_server==2.12.5",
+    "jiter",
+    "jupyter-lsp",
+    "jupyter_server",
     "jupyter_server_proxy",
     "jupyterlab",
     "jupyterlab-lsp",
     "kaggle>=1.8.3",
     "kaggle-environments",
-    "kagglehub[pandas-datasets,hf-datasets,signing]>=0.4.2",
+    "kagglehub[pandas-datasets,hf-datasets,signing]",
     # betterproto is a kagglehub[signing] dep that is still in beta; must be explicit
     "betterproto>=2.0.0b6",
     "keras-cv",
@@ -154,6 +151,7 @@ dependencies = [
     "scikit-plot",
     "scikit-surprise",
     "squarify",
+    "tensorflow[and-cuda]~=2.20.0rc0",
     "tensorflow-io",
     # Pinned: must match torch 2.x ABI
     # https://github.com/meta-pytorch/torchcodec?tab=readme-ov-file#installing-torchcodec
@@ -168,6 +166,8 @@ dependencies = [
     "ydata-profiling",
     "librosa",
     "pandas",
+    "iterative-stratification",
+    "perch-hoplite[tf-cuda]",
 ]
 
 [tool.uv]
