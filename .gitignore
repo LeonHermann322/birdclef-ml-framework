@@ -6,3 +6,5 @@ config.yaml
 **/y/**
 *.csv
 **/.venv/**
+
+data/**

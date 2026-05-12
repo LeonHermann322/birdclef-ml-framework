@@ -71,7 +71,7 @@ class PerchModel(BaseModel):
         self.loss_fn = BCEWithLogitsLoss()
 
     def forward(self, batch: Batch) -> ModelOutput:
-        embed_output = self.model.embed(batch.input.numpy())
+        embed_output = self.model.embed(batch.input)
         assert embed_output.logits is not None
 
         return ModelOutput(
@@ -122,3 +122,8 @@ class PerchModel(BaseModel):
                 "specificity": specificity.item(),
             },
         )
+    
+    def compute_embedding(self, batch: Batch):
+        embed_output = self.model.embed(batch.input)
+        assert embed_output.logits is not None
+        return embed_output.logits
