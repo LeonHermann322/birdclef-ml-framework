@@ -22,4 +22,10 @@ def load_splits(yaml_config):
     train_df = pd.read_csv(train_path)
     val_df = pd.read_csv(val_path)
     test_df = pd.read_csv(test_path)
+
+    #TODO: remove this, after adding the file split handle 
+    train_df = train_df[~ train_df["filename"].str.contains("_train_start_")].reset_index(drop=True)
+    val_df = val_df[~ val_df["filename"].str.contains("_train_start_")].reset_index(drop=True)
+    test_df = test_df[~ test_df["filename"].str.contains("_test_start_")].reset_index(drop=True)
+
     return train_df, val_df, test_df
