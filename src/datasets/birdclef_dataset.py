@@ -98,16 +98,14 @@ class BirdClefDataset(BaseDataset):
         soundscape_mask = self.items["filename"].str.contains("soundscape", na=False)
 
         if self.config.only_soundscapes:
+            # Keep only soundscape recordings
             self.items = self.items[soundscape_mask].reset_index(drop=True)
-            soundscape_mask = self.items["filename"].str.contains(
-                "soundscape", na=False
-            )
 
         if soundscape_mask.any():
             # Expand each soundscape recording into 5-second windows using the
             # per-window labels file and match rows by filename suffix only.
             soundscape_labels = pd.read_csv(
-                self.yaml_config.base_data_dir + "/train_soundscapes_labels.csv"
+                self.yaml_config.base_data_dir + "/split_soundscapes_labels.csv"
             )
             soundscape_labels["filename_suffix"] = soundscape_labels["filename"].map(
                 os.path.basename
