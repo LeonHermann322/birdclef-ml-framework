@@ -3,42 +3,18 @@ from typing_extensions import Self
 from pydantic import BaseModel
 
 import torch
-import torch.nn.functional as F
-
-from src.datasets.base_dataset import Batch
 from src.args.yaml_config import YamlConfigModel
 from src.datasets.base_dataset import BaseDataset, Sample
-from src.datasets.birdclef_utils import load_splits
+from src.datasets.birdclef_dataset import BirdClefDatasetArgs, BirdClefDataset, LabelEncoder, BirdClefSample
 import librosa
 import numpy as np
 import pandas as pd
 import ast
 
 
-class BirdClefSpectrogramDatasetArgs(BaseModel):
+class BirdClefSpectrogramDatasetArgs(BirdClefDatasetArgs):
     # TODO: this is only for debug experiment. However, need to find a good approach to handling long audio inputs
     max_audio_length: int = 4096
-
-
-class LabelEncoder:
-    def __init__(self, taxonomy_file: str) -> None:
-        taxonomy = pd.read_csv(taxonomy_file)
-        self.class_to_index = {
-            label: idx for idx, label in enumerate(taxonomy.primary_label.unique())
-        }
-        self.index_to_class = {idx: label for label, idx in self.class_to_index.items()}
-
-    def transform_to_label_tensor(self, labels) -> torch.Tensor:
-        # Remove duplicates
-        labels = list(set(labels))
-        label_tensor = torch.zeros(len(self.class_to_index), dtype=torch.long)
-        indices = [self.class_to_index[label] for label in labels]
-        label_tensor[indices] = 1
-        assert label_tensor.sum() == len(
-            labels
-        ), f"Faulty label tensor: {labels}, expected {len(labels)} positive labels"
-        return label_tensor
-
 
 def load_audio_and_compute_spectrogram(
     file_path: str,
@@ -64,7 +40,7 @@ def load_audio_and_compute_spectrogram(
     return spectrogram
 
 
-class BirdClefSpectrogramSample(Sample):
+class BirdClefSpectrogramSample(BirdClefSample):
     def __init__(self, spectrogram, label):
         super().__init__(input=spectrogram, target=label)
 
@@ -154,52 +130,15 @@ class BirdClefSpectrogramSample(Sample):
         return BirdClefSpectrogramSample(torch.tensor(spectrogram), label_tensor)
 
 
-class BirdClefSpectrogramDataset(BaseDataset):
+class BirdClefSpectrogramDataset(BirdClefDataset):
     def __init__(
         self, config: BirdClefSpectrogramDatasetArgs, yaml_config: YamlConfigModel
     ):
-        self.yaml_config = yaml_config
-        self.config = config
-        self.train, self.val, self.test = load_splits(yaml_config)
-        self.label_encoder = LabelEncoder(
-            taxonomy_file=yaml_config.base_data_dir + "/taxonomy.csv"
-        )
-
-    def get_split(
-        self, split: Literal["train"] | Literal["val"] | Literal["test"]
-    ) -> Self:
-        if split == "train":
-            self.items = self.train
-        elif split == "val":
-            self.items = self.val
-        elif split == "test":
-            self.items = self.test
-        else:
-            raise ValueError(f"Invalid split: {split}")
-        return self
+        super().__init__(config, yaml_config)
+        self.config: BirdClefSpectrogramDatasetArgs = self.config #for type hinting purpose
 
     def __getitem__(self, index: int) -> BirdClefSpectrogramSample:
         row = self.items.iloc[index]
         return BirdClefSpectrogramSample.from_split_label(
             row, self.label_encoder, max_length=self.config.max_audio_length
-        )
-
-    def __len__(self):
-        return len(self.items)
-
-    def get_collate_fn(self) -> Callable[[list[Sample]], Batch]:
-        def collate_fn(samples: list[Sample]) -> Batch:
-            # Input sizes: [128, x] - variable time dimension
-            inputs = [sample.input for sample in samples]
-            targets = torch.stack([sample.target for sample in samples])
-
-            # Pad all inputs to max length in batch
-            max_length = max(inp.shape[1] for inp in inputs)
-            padded_inputs = [
-                F.pad(inp, (0, max_length - inp.shape[1])) for inp in inputs
-            ]
-            inputs = torch.stack(padded_inputs)
-
-            return Batch(input=inputs, target=targets)
-
-        return collate_fn
+        ) 
