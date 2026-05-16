@@ -3,13 +3,14 @@ from typing_extensions import Self
 from pydantic import BaseModel
 
 import os
+import matplotlib.pyplot as plt
 import torch
 import torch.nn.functional as F
 
 from src.datasets.base_dataset import Batch
 from src.args.yaml_config import YamlConfigModel
 from src.datasets.base_dataset import BaseDataset, Sample
-from src.datasets.birdclef_spectrogram_dataset import LabelEncoder
+from src.datasets.birdclef_dataset import BirdClefDatasetArgs, BirdClefDataset,BirdClefSample, LabelEncoder
 import librosa
 import numpy as np
 import pandas as pd
@@ -32,8 +33,8 @@ def time_to_seconds(time_value: object) -> Optional[float]:
     return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
 
 
-class BirdClefWaveformDatasetArgs(BaseModel):
-    only_soundscapes: bool = False
+class BirdClefWaveformDatasetArgs(BirdClefDatasetArgs):
+    pass
 
 
 def load_audio_as_waveform(
@@ -57,12 +58,11 @@ def load_audio_as_waveform(
     return audio
 
 
-class BirdClefWaveformSample(Sample):
+class BirdClefWaveformSample(BirdClefSample):
     def __init__(self, waveform, label):
         super().__init__(input=waveform, target=label)
 
     def display(self):
-        import matplotlib.pyplot as plt
 
         plt.figure(figsize=(10, 4))
         plt.plot(self.input.numpy())
@@ -154,100 +154,15 @@ class BirdClefWaveformSample(Sample):
         )
 
 
-class BirdClefWaveformDataset(BaseDataset):
+class BirdClefWaveformDataset(BirdClefDataset):
     items: pd.DataFrame
 
     def __init__(
         self, config: BirdClefWaveformDatasetArgs, yaml_config: YamlConfigModel
     ):
-        self.yaml_config = yaml_config
-        self.config = config
-        self.items = pd.DataFrame()
-        self.label_encoder = LabelEncoder(
-            taxonomy_file=yaml_config.base_data_dir + "/taxonomy.csv"
-        )
-
-    def get_split(
-        self, split: Literal["train"] | Literal["val"] | Literal["test"]
-    ) -> Self:
-        if split == "train":
-            self.items = pd.read_csv(
-                self.yaml_config.project_root_dir + "/train_split.csv"
-            )
-        elif split == "val":
-            self.items = pd.read_csv(
-                self.yaml_config.project_root_dir + "/val_split.csv"
-            )
-        elif split == "test":
-            self.items = pd.read_csv(
-                self.yaml_config.project_root_dir + "/test_split.csv"
-            )
-        else:
-            raise ValueError(f"Invalid split: {split}")
-
-        soundscape_mask = self.items["filename"].str.contains("soundscape", na=False)
-
-        if self.config.only_soundscapes:
-            self.items = self.items[soundscape_mask].reset_index(drop=True)
-            soundscape_mask = self.items["filename"].str.contains(
-                "soundscape", na=False
-            )
-
-        if soundscape_mask.any():
-            # Expand each soundscape recording into 5-second windows using the
-            # per-window labels file and match rows by filename suffix only.
-            soundscape_labels = pd.read_csv(
-                self.yaml_config.base_data_dir + "/train_soundscapes_labels.csv"
-            )
-            soundscape_labels["filename_suffix"] = soundscape_labels["filename"].map(
-                os.path.basename
-            )
-            soundscape_rows = self.items[soundscape_mask].copy()
-            soundscape_rows["filename_suffix"] = soundscape_rows["filename"].map(
-                os.path.basename
-            )
-            expanded_soundscapes = soundscape_rows.merge(
-                soundscape_labels[["filename_suffix", "start", "end", "primary_label"]],
-                on="filename_suffix",
-                how="inner",
-            )
-            expanded_soundscapes["labels"] = expanded_soundscapes["primary_label"].map(
-                lambda labels: str(labels.split(";")) if pd.notna(labels) else "[]"
-            )
-            # Exclude windows with no labels
-            expanded_soundscapes = expanded_soundscapes[
-                expanded_soundscapes["labels"] != "[]"
-            ]
-            expanded_soundscapes = expanded_soundscapes.drop(
-                columns=["filename_suffix", "primary_label"]
-            )
-            non_soundscapes = self.items[~soundscape_mask].copy()
-            self.items = pd.concat(
-                [non_soundscapes, expanded_soundscapes], ignore_index=True
-            )
-
-        return self
+        super().__init__(config, yaml_config)
+        self.config: BirdClefWaveformDatasetArgs = self.config #for type hinting purpose
 
     def __getitem__(self, index: int) -> BirdClefWaveformSample:
         row = self.items.iloc[index]
         return BirdClefWaveformSample.from_split_label(row, self.label_encoder)
-
-    def __len__(self):
-        return len(self.items)
-
-    def get_collate_fn(self) -> Callable[[list[Sample]], Batch]:
-        def collate_fn(samples: list[Sample]) -> Batch:
-            # Input sizes: variable - different audio lengths
-            inputs = [sample.input for sample in samples]
-            targets = torch.stack([sample.target for sample in samples])
-
-            # Pad all waveforms to max length in batch
-            max_length = max(inp.shape[0] for inp in inputs)
-            padded_inputs = [
-                F.pad(inp, (0, max_length - inp.shape[0])) for inp in inputs
-            ]
-            inputs = torch.stack(padded_inputs)
-
-            return Batch(input=inputs, target=targets)
-
-        return collate_fn
