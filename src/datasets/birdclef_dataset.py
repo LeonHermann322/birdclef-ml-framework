@@ -1,4 +1,4 @@
-#Parent Class for BirdCLEF Datasets
+# Parent Class for BirdCLEF Datasets
 import os
 from typing import Callable, Literal, Optional
 from typing_extensions import Self
@@ -6,50 +6,82 @@ from pydantic import BaseModel
 from src.datasets.base_dataset import BaseDataset, Sample
 from src.datasets.base_dataset import Batch
 from src.args.yaml_config import YamlConfigModel
+from iterstrat.ml_stratifiers import MultilabelStratifiedShuffleSplit
 
 import pandas as pd
 import torch
 import torch.nn.functional as F
+import numpy as np
 from dataclasses import dataclass
+
 
 @dataclass
 class BirdClefDatasetArgs(BaseModel):
     only_soundscapes: bool = False
 
+
 class BirdClefSample(Sample):
-    
+
     def __init__(self, input, target):
         super().__init__(input=input, target=target)
 
-def create_random_val_split(yaml_config, val_fraction=0.2, random_seed=42):
-    
-    print("val_split.csv not found. Creating val_split.csv by splitting train_split.csv")
-    #split train_split.csv randomly by 20% to create val_split.csv if val_split.csv doesn't exist
+
+def create_random_val_split(
+    yaml_config, class_mapping, val_fraction=0.2, random_seed=42
+):
+
+    print(
+        "val_split.csv not found. Creating val_split.csv by splitting train_split.csv"
+    )
+
+    np.random.seed(random_seed)
     train_df = pd.read_csv(yaml_config.base_data_dir + "/train_split.csv")
-    val_df = train_df.sample(frac=val_fraction, random_state=random_seed)
-    train_df = train_df.drop(val_df.index)
+
+    # create one hot vector
+    X = np.array([i for i in range(len(train_df))])
+    y = np.array([[0] * len(class_mapping) for _ in range(len(train_df))])
+    for idx, labels in enumerate(train_df["primary_label"]):
+        for label in labels:
+            label_idx = class_mapping[label]
+            y[idx][label_idx] = 1
+
+    msss1 = MultilabelStratifiedShuffleSplit(
+        n_splits=1, test_size=val_fraction, random_state=random_seed
+    )
+
+    train_index, test_index = msss1.split(X, y).__next__()
+
+    val_df = train_df.iloc[test_index].reset_index(drop=True)
+    train_df = train_df.iloc[train_index].reset_index(drop=True)
+
     train_df.to_csv(yaml_config.base_data_dir + "/train_split.csv", index=False)
     val_df.to_csv(yaml_config.base_data_dir + "/val_split.csv", index=False)
 
-def load_splits(yaml_config):
+
+def load_splits(yaml_config, class_mapping):
     train_path = os.path.join(yaml_config.project_root_dir, "train_split.csv")
     val_path = os.path.join(yaml_config.project_root_dir, "val_split.csv")
     test_path = os.path.join(yaml_config.project_root_dir, "test_split.csv")
 
     if not os.path.exists(yaml_config.base_data_dir + "/val_split.csv"):
-        create_random_val_split(yaml_config)
-    
+        create_random_val_split(yaml_config, class_mapping)
+
     train_df = pd.read_csv(train_path)
     val_df = pd.read_csv(val_path)
     test_df = pd.read_csv(test_path)
 
-    #TODO: remove this, after adding the file split handle 
-    train_df = train_df[~ train_df["filename"].str.contains("_train_start_")].reset_index(drop=True)
-    val_df = val_df[~ val_df["filename"].str.contains("_train_start_")].reset_index(drop=True)
-    test_df = test_df[~ test_df["filename"].str.contains("_test_start_")].reset_index(drop=True)
+    # TODO: remove this, after adding the file split handle
+    train_df = train_df[
+        ~train_df["filename"].str.contains("_train_start_")
+    ].reset_index(drop=True)
+    val_df = val_df[~val_df["filename"].str.contains("_train_start_")].reset_index(
+        drop=True
+    )
+    test_df = test_df[~test_df["filename"].str.contains("_test_start_")].reset_index(
+        drop=True
+    )
 
     return train_df, val_df, test_df
-
 
 
 class LabelEncoder:
@@ -59,6 +91,9 @@ class LabelEncoder:
             label: idx for idx, label in enumerate(taxonomy.primary_label.unique())
         }
         self.index_to_class = {idx: label for label, idx in self.class_to_index.items()}
+
+    def get_class_to_index_mapping(self):
+        return self.class_to_index
 
     def transform_to_label_tensor(self, labels) -> torch.Tensor:
         # Remove duplicates
@@ -73,12 +108,12 @@ class LabelEncoder:
 
 
 class BirdClefDataset(BaseDataset):
-    def __init__(
-        self, config: BirdClefDatasetArgs, yaml_config: YamlConfigModel
-    ):
+    def __init__(self, config: BirdClefDatasetArgs, yaml_config: YamlConfigModel):
         self.yaml_config = yaml_config
         self.config = config
-        self.train, self.val, self.test = load_splits(yaml_config)
+        self.train, self.val, self.test = load_splits(
+            yaml_config, self.label_encoder.get_class_to_index_mapping()
+        )
         self.label_encoder = LabelEncoder(
             taxonomy_file=yaml_config.base_data_dir + "/taxonomy.csv"
         )
@@ -137,7 +172,9 @@ class BirdClefDataset(BaseDataset):
         return self
 
     def __getitem__(self, index: int) -> BirdClefSample:
-        raise NotImplementedError("This method should be overridden in a subclass of BirdClefDataset")
+        raise NotImplementedError(
+            "This method should be overridden in a subclass of BirdClefDataset"
+        )
 
     def __len__(self):
         return len(self.items)
