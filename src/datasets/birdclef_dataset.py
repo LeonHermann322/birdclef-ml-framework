@@ -1,4 +1,5 @@
 # Parent Class for BirdCLEF Datasets
+import ast
 import os
 from typing import Callable, Literal, Optional
 from typing_extensions import Self
@@ -12,12 +13,10 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 import numpy as np
-from dataclasses import dataclass
 
 
-@dataclass
 class BirdClefDatasetArgs(BaseModel):
-    only_soundscapes: bool = False
+    only_soundscapes: bool = True
 
 
 class BirdClefSample(Sample):
@@ -40,7 +39,9 @@ def create_random_val_split(
     # create one hot vector
     X = np.array([i for i in range(len(train_df))])
     y = np.array([[0] * len(class_mapping) for _ in range(len(train_df))])
-    for idx, labels in enumerate(train_df["primary_label"]):
+
+    labels = train_df["primary_label"].apply(lambda x:ast.literal_eval(x)).tolist()
+    for idx, labels in enumerate(labels):
         for label in labels:
             label_idx = class_mapping[label]
             y[idx][label_idx] = 1
@@ -59,9 +60,9 @@ def create_random_val_split(
 
 
 def load_splits(yaml_config, class_mapping):
-    train_path = os.path.join(yaml_config.project_root_dir, "train_split.csv")
-    val_path = os.path.join(yaml_config.project_root_dir, "val_split.csv")
-    test_path = os.path.join(yaml_config.project_root_dir, "test_split.csv")
+    train_path = os.path.join(yaml_config.base_data_dir, "train_split.csv")
+    val_path = os.path.join(yaml_config.base_data_dir, "val_split.csv")
+    test_path = os.path.join(yaml_config.base_data_dir, "test_split.csv")
 
     if not os.path.exists(yaml_config.base_data_dir + "/val_split.csv"):
         create_random_val_split(yaml_config, class_mapping)
@@ -111,11 +112,11 @@ class BirdClefDataset(BaseDataset):
     def __init__(self, config: BirdClefDatasetArgs, yaml_config: YamlConfigModel):
         self.yaml_config = yaml_config
         self.config = config
-        self.train, self.val, self.test = load_splits(
-            yaml_config, self.label_encoder.get_class_to_index_mapping()
-        )
         self.label_encoder = LabelEncoder(
             taxonomy_file=yaml_config.base_data_dir + "/taxonomy.csv"
+        )
+        self.train, self.val, self.test = load_splits(
+            yaml_config, self.label_encoder.get_class_to_index_mapping()
         )
 
     def get_split(
@@ -135,12 +136,14 @@ class BirdClefDataset(BaseDataset):
         if self.config.only_soundscapes:
             # Keep only soundscape recordings
             self.items = self.items[soundscape_mask].reset_index(drop=True)
+            # Recalculate mask since indices changed
+            soundscape_mask = self.items["filename"].str.contains("soundscape", na=False)
 
         if soundscape_mask.any():
             # Expand each soundscape recording into 5-second windows using the
             # per-window labels file and match rows by filename suffix only.
             soundscape_labels = pd.read_csv(
-                self.yaml_config.base_data_dir + "/split_soundscapes_labels.csv"
+                self.yaml_config.project_root_dir + "/data/split_soundscapes_labels.csv"
             )
             soundscape_labels["filename_suffix"] = soundscape_labels["filename"].map(
                 os.path.basename
@@ -149,6 +152,8 @@ class BirdClefDataset(BaseDataset):
             soundscape_rows["filename_suffix"] = soundscape_rows["filename"].map(
                 os.path.basename
             )
+            # Drop the original primary_label since we'll use the per-window labels
+            soundscape_rows = soundscape_rows.drop(columns=["primary_label"])
             expanded_soundscapes = soundscape_rows.merge(
                 soundscape_labels[["filename_suffix", "start", "end", "primary_label"]],
                 on="filename_suffix",
